@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <time.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
 
 /*movie struct*/
 struct movie{
@@ -54,7 +59,7 @@ void printMovie(struct movie *mov){
             mov->rating);
 }
 
-void printList(struct movie *head){
+void printList(struct  movie *head){
     struct movie *temp = head->next;
     while(temp != NULL){
         printMovie(temp);
@@ -62,116 +67,11 @@ void printList(struct movie *head){
     }
 }
 
-/* option helper functions */
-void optionOne(int year, struct movie *head){
-    struct movie *temp = head;
-    int movYear;
-    int count = 0;
-    /* this gets the year for each movie and only prints if matches desired year*/
-    while(temp != NULL){
-        sscanf(temp->year, "%d", &movYear);
-        if(movYear == year){
-            printMovie(temp);
-            count +=1;
-        }
-        temp = temp->next;
-    }
-    if(count == 0){printf("There are no movies from this year\n");}
-}
-
-void optionTwo(struct movie *head){
-    /* this function creates an array that corresponds to every yesr (2021-1900)
-        then calcualtes the year and puts the movie in the index if empty
-        otherwise it compares the rating of the current movie and the movie
-        in the index
-    */
-    struct movie *temp = head->next;
-    struct movie *yearArray[121];
-
-   int movYear;
-   double movRating;
-   double arrayRating;
-    int i = 0;
-    for(i; i<=121;i++){
-            yearArray[i] = NULL;
-        }
-
-   while(temp != NULL){
-        sscanf(temp->year, "%d", &movYear);
-        int arrayIndex = (movYear-1900);    
-
-        //put index in if empty
-        if(yearArray[arrayIndex] == NULL){
-            yearArray[arrayIndex] = temp;
-        }
-        //otherwise compare rating of array movie and current movie
-        else{
-            sscanf(temp->rating, "%f", &movRating);
-            char * rating = temp->rating;
-            char * array =  yearArray[arrayIndex]->rating;
-            sscanf(rating, "%lf", &movRating);
-            sscanf(array, "%lf", &arrayRating);
-
-            if(movRating > arrayRating){
-                yearArray[arrayIndex] = temp;
-            }
-        }
-        temp = temp->next;
-   }
-    int j = 0;
-
-    //print only if the array index is not empty (a movie for that year exists)
-    for(j; j <121; j++){
-
-        if(yearArray[j] != NULL){
-            double holder;
-            sscanf(yearArray[j]->rating, "%lf", &holder);
-            printf("%s %0.1f %s\n",
-                yearArray[j]->year,
-                holder, 
-                yearArray[j]->title);
-        }
-
-    }
-}
-
-void optionThree(char * language, struct movie *head){
-    /* this checks if there is a substrin of the language in main list if yes it check that the substring
-        ends in either ; or ] so we know it is a language (so Engl doesn't show up as a language for example)
-    */
-    struct movie *temp = head->next;
-    int count = 0;
-    while(temp != NULL){
-        char * l = temp->languages;
-        char * getLan = strstr(l, language);
-        int size = strlen(language);
-    
-        if(getLan != NULL){
-            if(*(getLan+size) == ';' || *(getLan+size) == ']'){
-                printMovie(temp);
-                count +=1;
-            }
-            
-        }
-        temp = temp->next;
-    }
-    if(count == 0){
-            printf("No movies in that language on this list\n");
-    }
-}
-
-
-
-
-int main(int argc, char *argv[]){
-    /* this part takes an input file */
-    if (argc == 1){printf("You didn't provide a file path", "\n");}
-    if(argc > 2){printf("Too many arguments provided");}
-    
+struct movie * readFile(char *fileName){
     /* this part opens the file */
-    FILE *movies = fopen(argv[1], "r");
-    if(!movies){printf("Failure to open file. Try checking your file path or name");}
-    else{printf("%s %s", "Opened your file named", argv[1]);}
+    FILE *movies = fopen(fileName, "r");
+    if(!movies){printf("Failure to open file. Try checking your file path or name"); return 0;}
+    else{printf("%s %s", "\nOpened your file named", fileName);};
     printf("\n");
 
     /* Here is where we start proccessing - inspo from student main provided */
@@ -184,7 +84,7 @@ int main(int argc, char *argv[]){
     struct movie *head = NULL;
     struct movie *tail = NULL;
 
-    int count;
+    int count = 0;
     struct linkedList *movieList;
 
     /* reading the file here */
@@ -202,24 +102,192 @@ int main(int argc, char *argv[]){
         fclose(movies);
 
     printf("%s %d %s", "\nProcessed data for", count-1, "movies\n");
+    return head;
+}
 
-    /* 1 through 4 select options */
+char * makeDirectory(){
+    srand(time(NULL));
+    int random = rand() % 99999;
+
+    char * randomString = malloc(sizeof(char) * 5);
+
+    sprintf(randomString, "%d", random);
+    
+    char * pathName = malloc(sizeof(char) * 20);
+    strcpy(pathName,"spawnm.movies.");
+
+    strcat(pathName, randomString);
+
+    mkdir(pathName, 0750);
+    printf("%s %s", "Created a directory named:", pathName);
+
+    return pathName;
+
+}
+
+void parseYears(struct movie *head, char * pathname){
+    struct movie *temp = head->next;
+    int movYear;
+    char * moviePath = malloc(sizeof(char)*10);
+    
+   while(temp != NULL){
+        sscanf(temp->year, "%d", &movYear);
+        char * movieYear = malloc(sizeof(char) * 4);
+        sprintf(movieYear, "%d", movYear);
+        int arrayIndex = (movYear-1900); 
+
+        sprintf(moviePath, "./%s.txt", movieYear);
+
+        char * directoryName = malloc(strlen(pathname)+ sizeof(char)*3);
+        sprintf(directoryName, "%s", "./");
+        strcat(directoryName, pathname);
+            
+        chdir(directoryName);
+
+    
+        char * filePath = malloc(strlen(pathname) + sizeof(char)*10);
+
+            FILE *fp;
+            fp  = fopen (moviePath, "a");
+            chmod(moviePath, 0640);
+
+            strcat(temp->title, "\n");
+
+            fputs(temp->title,fp);
+            if(!fp){
+                perror("Error");            
+            }
+            close(fp);
+    
+
+        temp = temp->next;
+}
+}
+
+int getSizeComp(char *filename){
+        /* this part opens the file */
+    FILE *movies = fopen(filename, "r");
+    if(!movies){
+        perror("Error");
+    }
+
+    char *currLine = NULL;
+    size_t len = 0;
+    char *token;
+    size_t nread;
+
+    int count = 0;
+
+    while((nread = getline(&currLine, &len, movies)) != -1){  
+        count += 1;
+    }
+        fclose(movies);
+    
+
+    return count;
+}
+
+/* option helper functions */
+void optionOne(){
+   printf("You selected option one\n");
+
+    DIR* currDir = opendir(".");
+    struct dirent *aDir;
+    
+    int count = 0;
+    char *name = malloc(sizeof(char)*1000);
+
+    while((aDir = readdir(currDir)) != NULL){
+        if(strncmp("movies_", aDir->d_name, strlen("movies_")) == 0){
+            char * point = aDir->d_name + strlen(aDir->d_name);
+
+            //from a stack overflow post
+            if((point = strrchr(aDir->d_name,'.')) != NULL ) {
+                if(strcmp(point,".csv") == 0) {
+                    int size = getSizeComp(aDir->d_name);
+                    if(size > count){
+                        strncpy(name, aDir->d_name, 1000);
+                        count = size;
+                    }
+                }
+            }
+        } 
+    }
+
+    printf("%s %s", "Now processing largest file named:",name);
+    struct movie *head = readFile(name);
+    char * pathname = makeDirectory();
+
+    parseYears(head, pathname);
+    free(pathname);
+    free(currDir);
+    free(aDir);
+   
+}
+
+void optionTwo(){
+    printf("You selected option two\n");
+    DIR* currDir = opendir(".");
+    struct dirent *aDir;
+    
+    int count = INT_MAX;
+    char *name = malloc(sizeof(char)*1000);
+
+    while((aDir = readdir(currDir)) != NULL){
+        if(strncmp("movies_", aDir->d_name, strlen("movies_")) == 0){
+            char * point = aDir->d_name + strlen(aDir->d_name);
+
+            //from a stack overflow post
+            if((point = strrchr(aDir->d_name,'.')) != NULL ) {
+                if(strcmp(point,".csv") == 0) {
+                    int size = getSizeComp(aDir->d_name);
+    
+                    if(count > size){
+                        strncpy(name, aDir->d_name, 1000);
+                        count = size;
+                    }
+                }
+            }
+        } 
+    }
+
+    printf("%s %s", "Now processing smallest file named:",name);
+    struct movie *head = readFile(name);
+    char * pathname = makeDirectory();
+
+    parseYears(head, pathname);
+    free(pathname);
+    free(currDir);
+    free(aDir);
+   
+}
+
+void optionThree(char * fileName){
+    
+            struct movie *head = readFile(fileName);
+            char * pathname = makeDirectory();
+
+            parseYears(head, pathname);
+}
+
+
+int main(){
+
+    /* 1 through 2 select options */
     bool valid = false;
     int selected = 0;
     while(selected != 4){
         selected = 0;
         fflush(stdin);
         while(!valid || selected == 0){
-            printf("\nSelect a number 1-4 from the options below:\n");
-            printf("1.Show movies released in the specified year\n");
-            printf("2.Show highest rated movie for each year\n");
-            printf("3.Show the title and year of release of all movies in a specific language\n");
-            printf("4.Exit from the program\n");
-            printf("\nEnter:");
+            valid = false;
+            printf("\nSelect either 1 or 2 from the options below:\n");
+            printf("1.Select file to process\n");
+            printf("2.Quit\n");
             scanf("%d", &selected);
             
             //checking if integer is in desired range
-            if(selected < 0 || selected > 5){printf("You selected an invalid choice");}
+            if(selected < 0 || selected > 2){printf("You selected an invalid choice");}
             else{valid = 1;}
         }
 
@@ -227,30 +295,42 @@ int main(int argc, char *argv[]){
         if(selected == 1){
             int year;
             printf("You selected 1\n");
-            printf("\nEnter a year: ");
-            scanf("%d", &year);
+            bool valid2 = false;
+            while(valid2 != true)
+            {
+                printf("\nSelect either 1,2 or 3 from the options below:\n");
+                printf("Enter 1 to pick the largest file\n");
+                printf("Enter 2 to pick the smallest file\n");
+                printf("Enter 3 to specify the name of a file\n");
+                scanf("%d", &selected);
 
-            optionOne(year, head);
+                if(selected == 1){valid2 = true; optionOne();}
+                if(selected == 2){valid2 = true; optionTwo();}
+                if(selected == 3){
+                    printf("You selected option three\n");
+                    printf("Enter your movie list file name: ");
 
+                    char * fileName;
+                    fileName=malloc(sizeof(char) * 20);
+                    scanf("%s", fileName);
+                    printf(fileName);
+                    
+                    FILE *movies = fopen(fileName, "r");
+                    if(!movies){
+                        printf("\nFailure to open file. Try checking your file path or name");
+                    }
+                    else{
+                        valid2 = true;
+                        optionThree(fileName);
+                    }
+                }
+                if(selected < 0 || selected > 3){printf("You selected an invalid choice\n");}
+                else{valid = 1;}
+            }
         }
-        if(selected == 2){
-            printf("You selected 2\n");
-            optionTwo(head);
-
-        }
-        if(selected == 3){
-            
-            char *language; 
-            language=malloc(sizeof(char) * 20);
-            printf("You selected 3\n");
-            printf("\nEnter a language:");
-            scanf("%s", language);
-            
-            optionThree(language, head);
-        }
+        
+        else{return 0;}
     }
-    /* if 4 is pressed it returns here */
-    return 0;
 }
 
 
