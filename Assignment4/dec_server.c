@@ -9,47 +9,46 @@
 
 //-----------------------------------------------------------------------------//
 
-int checker(char *plaintext, char *key){
-  //this function checks to make sure all valid chars and length is sufficient
-    int i;
-    int len = strlen(plaintext);
-    int lenKey = strlen(key);
-
-    if(len > lenKey){
-        //if key is not long enough
-        printf("\nERROR: key length insufficient\n");
-        return 1;
-    }
-
-    for (i = 0; i < len-1; i++) {
-        char c = plaintext[i];
-        char k = key[i];
-
-        if ((k < 'A' && k > 'Z' || k != ' ') && (c < 'A' && c > 'Z' || c != ' ')) {
-            printf("%s on chars %c and %c\n", "\nERROR: invalid character in either message or key", c,k);
-            return 1;
+int check(char* str) {
+    int len = strlen(str);
+    for (int i = 0; i < strlen(str)-2; i++) {
+        if (!isupper(str[i]) && str[i] != ' ') {
+            return 0;
         }
     }
-
-    return 0;
+    return 1;
 }
 
-char * encode(char *plaintext, char *key) {
+//----------------------------------------------------------------------------//
+
+char * decode(char *ciphertext, char *key) {
     int i;
-    int len = strlen(plaintext);
+    int len = strlen(ciphertext);
 
-    char *ciphertext = malloc(sizeof(char) * (len + 1));
+    char *plaintext = malloc(sizeof(char) * (len + 1));
 
-    for (i = 0; i < len; i++) {
-        char c = plaintext[i];
+    for (i = 0; i < len-1; i++) {
+        char c = ciphertext[i];
         char k = key[i];
-        int cipher_val = (c + k) % 26;
-        ciphertext[i] = 'A' + cipher_val;
+
+        if (c == ' ') {
+            plaintext[i] = ' ';
+            continue;
+        }
+
+        if (k == ' ') {
+            k = 26;
+        } else {
+            k -= 'A';
+        }
+
+        c -= 'A';
+        int plain_val = (c - k + 26) % 26;
+        plaintext[i] = 'A' + plain_val;
     }
 
-    ciphertext[len+1] = '\n';
 
-    return ciphertext;
+    return plaintext;
 }
 
 char *read_file(char *filename) {
@@ -80,12 +79,13 @@ char *read_file(char *filename) {
     // Return the buffer
     return buffer;
 }
+
 //-----------------------------------------------------------------------------//
 
 //error function used for reporting issues
-void error(const char *msg) {
+int error(const char *msg) {
   perror(msg);
-  exit(1);
+  return -1;
 } 
 
 //----------------------------------------------------------------------//
@@ -104,11 +104,11 @@ void setupAddressStruct(struct sockaddr_in* address, int portNumber){
   address->sin_addr.s_addr = INADDR_ANY;
 }
 
-//----------------------------------------------------------------------//
+//-----------------------------------------------------------------------------//
 
 int main(int argc, char *argv[]){
   int connectionSocket, charsRead;
-  char buffer[256];
+  char buffer[100000];
   struct sockaddr_in serverAddress, clientAddress;
   socklen_t sizeOfClientInfo = sizeof(clientAddress);
 
@@ -145,14 +145,11 @@ int main(int argc, char *argv[]){
       error("ERROR on accept");
     }
 
-    printf("SERVER: Connected to client running at host %d port %d\n", 
-                          ntohs(clientAddress.sin_addr.s_addr),
-                          ntohs(clientAddress.sin_port));
 
     // Get the message from the client and display it
-    memset(buffer, '\0', 256);
+    memset(buffer, '\0', 100000);
     // Read the client's message from the socket
-    charsRead = recv(connectionSocket, buffer, 255, 0); 
+    charsRead = recv(connectionSocket, buffer, 100000, 0); 
     if (charsRead < 0){
       error("ERROR reading from socket");
     }
@@ -171,21 +168,35 @@ int main(int argc, char *argv[]){
         arg2 = newline_pos + 1;
     }
 
-    printf("SERVER: I received these args from the client");
+    char *newline_two = strchr(arg2, '\n');
+    char *arg3;
+    // If a newline was found, extract the two arguments
+    if (newline_two != NULL) {
+        // Null-terminate the string at the newline character
+        *newline_two = '\0';
+
+        // Advance the pointer to the character after the newline
+        arg3 = newline_two + 1;
+    }
+
     char * message = read_file(arg1);
     char * key = read_file(arg2);
 
-    char * ciphertext = malloc(sizeof(char)* strlen(message));
+    char * deciphertext = malloc(sizeof(char)* strlen(message));
 
-    checker(message, key);
-    
-    ciphertext = encode(message, key);
+    deciphertext = decode(message, key);
     // Send a Success message back to the client
-    charsRead = send(connectionSocket, 
-                    ciphertext, strlen(message), 0); 
-    if (charsRead < 0){
-      error("ERROR writing to socket");
+
+    if(strcmp(arg3, "./dec_client")){
+      error("ERROR: Trying to connect to the wrong server");
+      deciphertext = "";
     }
+      charsRead = send(connectionSocket, 
+                    deciphertext, strlen(message), 0); 
+        if (charsRead < 0){
+          error("ERROR writing to socket");
+      }
+
     // Close the connection socket for this client
     close(connectionSocket); 
   }

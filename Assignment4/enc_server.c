@@ -5,25 +5,64 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <ctype.h>
 
 //-----------------------------------------------------------------------------//
 
-char * decode(char *plaintext, char *key) {
+//error function used for reporting issues
+int error(const char *msg) {
+  perror(msg);
+  return -1;
+} 
+
+//-----------------------------------------------------------------------------//
+
+int checker(char* str) {
+    int len = strlen(str);
+    for (int i = 0; i < len-1; i++) {
+        char c = str[i];
+        if (c > 'Z' || c < 'A' && c != ' ') {
+             return 1;
+        }
+    }
+        return 0; 
+}
+
+char * encode(char *plaintext, char *key) {
     int i;
+    
     int len = strlen(plaintext);
 
-    char *deciphertext = malloc(sizeof(char) * (len + 1));
+    char *ciphertext = malloc(sizeof(char) * (len + 1));
 
-    for (i = 0; i < len; i++) {
+    for (i = 0; i < len-1; i++) {
         char c = plaintext[i];
         char k = key[i];
-        int decipher_val = (c - k) % 26;
-        deciphertext[i] = 'A' + decipher_val;
+
+        if (c == ' ') {
+            ciphertext[i] = ' ';
+            continue;
+        }
+
+        if (k == ' ') {
+            k = 26;
+        } else {
+            k -= 'A';
+        }
+
+        c -= 'A';
+        int cipher_val = (c + k) % 26;
+        ciphertext[i] = 'A' + cipher_val;
     }
 
-    deciphertext[len] = '\0';
+    if(strlen(plaintext) > strlen(key)){
+      error("ERROR: Too short key");
+      return "";
+    }
+    else{
+      return ciphertext;
+    }
 
-    return deciphertext;
 }
 
 char *read_file(char *filename) {
@@ -55,14 +94,6 @@ char *read_file(char *filename) {
     return buffer;
 }
 
-//-----------------------------------------------------------------------------//
-
-//error function used for reporting issues
-void error(const char *msg) {
-  perror(msg);
-  exit(1);
-} 
-
 //----------------------------------------------------------------------//
 
 //set up the address struct for the server socket
@@ -81,11 +112,9 @@ void setupAddressStruct(struct sockaddr_in* address, int portNumber){
 
 //----------------------------------------------------------------------//
 
-//-----------------------------------------------------------------------------//
-
 int main(int argc, char *argv[]){
   int connectionSocket, charsRead;
-  char buffer[256];
+  char buffer[100000];
   struct sockaddr_in serverAddress, clientAddress;
   socklen_t sizeOfClientInfo = sizeof(clientAddress);
 
@@ -122,14 +151,11 @@ int main(int argc, char *argv[]){
       error("ERROR on accept");
     }
 
-    printf("SERVER: Connected to client running at host %d port %d\n", 
-                          ntohs(clientAddress.sin_addr.s_addr),
-                          ntohs(clientAddress.sin_port));
 
     // Get the message from the client and display it
-    memset(buffer, '\0', 256);
+    memset(buffer, '\0', 100000);
     // Read the client's message from the socket
-    charsRead = recv(connectionSocket, buffer, 255, 0); 
+    charsRead = recv(connectionSocket, buffer, 100000, 0); 
     if (charsRead < 0){
       error("ERROR reading from socket");
     }
@@ -148,19 +174,43 @@ int main(int argc, char *argv[]){
         arg2 = newline_pos + 1;
     }
 
-    printf("SERVER: I received from the client");
+    char *newline_two = strchr(arg2, '\n');
+    char *arg3;
+        //if a newline was found, extract the two arguments
+    if (newline_two != NULL) {
+        //null-terminate the string at the newline character
+        //advance the pointer to the character after the newline
+        *newline_two = '\0';
+        arg3 = newline_two + 1;
+    }
+
+    //------------------------------------Encode Block--------------------------------//
+
     char * message = read_file(arg1);
     char * key = read_file(arg2);
 
-    char * deciphertext = malloc(sizeof(char)* strlen(message));
-    
-    deciphertext = decode(message, key);
-    // Send a Success message back to the client
-    charsRead = send(connectionSocket, 
-                    deciphertext, strlen(message), 0); 
-    if (charsRead < 0){
-      error("ERROR writing to socket");
+    char * ciphertext = malloc(sizeof(char)* strlen(message));
+    ciphertext = encode(message, key);
+
+    if(strcmp(arg3, "./enc_client")){
+      error("ERROR: Trying to connect to the wrong server");
+      ciphertext="";
     }
+
+    if(checker(message)==1 || checker(key)==1){
+      error("ERROR: Invalid character detected");
+      ciphertext ="bad";
+    }
+
+
+    //send a Success message back to the client
+    charsRead = send(connectionSocket, ciphertext, strlen(message), 0);         
+    if (charsRead < 0){
+        error("ERROR writing to socket");
+    }
+
+    //------------------------------------Encode Block--------------------------------//
+    
     // Close the connection socket for this client
     close(connectionSocket); 
   }
